@@ -176,9 +176,7 @@ var (
 	WebSet = wire.NewSet(
 		InitDB,
 		InitTicketEventProducer,
-		InitPolicySDK,
-		InitPermSyncer,
-		InitProviders,
+		InitAuthMiddleware,
 		InitListener,
 		InitGinMiddlewares,
 		InitGinWebServer,

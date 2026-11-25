@@ -1,28 +1,34 @@
 package ioc
 
 import (
-	"github.com/Duke1616/eiam/pkg/web/capability"
-	"github.com/Duke1616/eiam/pkg/web/capability/syncer"
-	httpreporter "github.com/Duke1616/eiam/pkg/web/capability/syncer/http"
-	"github.com/Duke1616/eiam/pkg/web/sdk"
+	userv1 "github.com/Duke1616/eflow/api/proto/gen/eiam/user/v1"
+	"github.com/Duke1616/eflow/internal/pkg/ecmdbauth"
+	"github.com/Duke1616/eflow/pkg/mqx"
+	"github.com/Duke1616/eiam/pkg/ctxutil"
+	"github.com/spf13/viper"
 )
 
-func InitPolicySDK() *sdk.SDK {
-	return sdk.NewSDK()
+// InitAuthMiddleware 初始化对接 ECMDB 的登录与权限中间件（替代上游 EIAM SDK）。
+//
+// 配置项：
+//
+//	policy.auth_url: ECMDB 地址（与 ecmdb-task 相同）
+//	tenant.default_id: 单租户部署注入的固定租户 ID，默认 1
+func InitAuthMiddleware(users userv1.UserServiceClient) *ecmdbauth.Middleware {
+	tenantID := DefaultTenantID()
+	// MQ 消费端同样使用该租户兜底，保证跨服务消息在单租户部署下不因缺少租户头被丢弃
+	mqx.SetDefaultTenantID(tenantID)
+	return ecmdbauth.New(ecmdbauth.Config{
+		AuthURL:  viper.GetString("policy.auth_url"),
+		TenantID: tenantID,
+		Timeout:  viper.GetDuration("policy.timeout"),
+	}, users)
 }
 
-func InitPermSyncer() syncer.Syncer {
-	return syncer.New(httpreporter.New())
-}
-
-// InitProviders 注册逻辑权限供应源。
-//
-// 得益于 capability SDK 的全自动发现机制（globalRegistries），凡是通过
-// capability.NewRegistry 实例化的 Handler 均会自动完成资产上报，
-// 开发者无需再手动将 Handler 注入到此列表中。
-//
-// 仅当存在"纯逻辑权限"（如：不直接关联任何 Web 路由的后台 Job 权限）时，
-// 才需在此处手动构建并返回自定义的 PermissionProvider。
-func InitProviders() []capability.PermissionProvider {
-	return nil
+// DefaultTenantID 单租户部署的固定租户 ID（tenant.default_id，默认 1）。
+func DefaultTenantID() int64 {
+	if tid := viper.GetInt64("tenant.default_id"); tid > 0 {
+		return tid
+	}
+	return ctxutil.SystemTenantID
 }

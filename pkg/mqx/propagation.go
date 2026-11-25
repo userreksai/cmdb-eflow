@@ -40,14 +40,30 @@ func InjectContext(ctx context.Context, msg *mq.Message) {
 	}
 }
 
+// defaultTenantID 单租户部署下的兜底租户：上游服务（如 ecmdb-task）未携带租户头时使用，
+// 避免消费者因缺少租户元数据而丢弃消息。0 表示不兜底（上游多租户行为）。
+var defaultTenantID int64
+
+// SetDefaultTenantID 设置消息缺少租户头时使用的兜底租户 ID。
+func SetDefaultTenantID(tid int64) {
+	defaultTenantID = tid
+}
+
 // ExtractContext 从 mq.Message.Header 中提取租户 ID、用户 ID 和业务 ID，重新注入并返回新的 Context
 func ExtractContext(ctx context.Context, msg *mq.Message) context.Context {
-	if msg == nil || msg.Header == nil {
+	if msg == nil {
 		return ctx
 	}
+	if msg.Header == nil {
+		msg.Header = make(mq.Header)
+	}
 
-	// 1. 提取并注入租户 ID
-	if tid := getHeaderID(msg.Header, HeaderTenantID); tid > 0 {
+	// 1. 提取并注入租户 ID（缺失时使用单租户兜底）
+	tid := getHeaderID(msg.Header, HeaderTenantID)
+	if tid <= 0 {
+		tid = defaultTenantID
+	}
+	if tid > 0 {
 		ctx = ctxutil.WithTenantID(ctx, tid)
 		ctx = ctxutil.WithOriginTenantID(ctx, tid)
 	}

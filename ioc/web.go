@@ -1,27 +1,24 @@
 package ioc
 
 import (
-	"context"
 	"net"
-	"time"
 
+	"github.com/Duke1616/eflow/internal/pkg/ecmdbauth"
 	"github.com/Duke1616/eflow/internal/web/dispatch"
 	"github.com/Duke1616/eflow/internal/web/task"
 	"github.com/Duke1616/eflow/internal/web/template"
 	"github.com/Duke1616/eflow/internal/web/ticket"
 	"github.com/Duke1616/eflow/internal/web/workflow"
-	"github.com/Duke1616/eiam/pkg/web/capability"
-	"github.com/Duke1616/eiam/pkg/web/capability/syncer"
 	"github.com/Duke1616/eiam/pkg/web/middleware"
-	"github.com/Duke1616/eiam/pkg/web/sdk"
 	"github.com/gin-gonic/gin"
-	"github.com/gotomicro/ego/core/elog"
 	"github.com/gotomicro/ego/server/egin"
 )
 
 // InitGinWebServer 初始化并装载 Gin Web Server，显式挂载工单模板和工作流的 API 私有路由
-func InitGinWebServer(mdls []gin.HandlerFunc, sdk *sdk.SDK,
-	syncer syncer.Syncer, providers []capability.PermissionProvider,
+//
+// 登录与权限统一委托给 ECMDB（见 internal/pkg/ecmdbauth）。上游的 EIAM 能力资产同步
+// (capability syncer) 在本部署中不启用：接口与菜单权限在 ECMDB 的菜单/权限模块中维护。
+func InitGinWebServer(mdls []gin.HandlerFunc, auth *ecmdbauth.Middleware,
 	templateHdl *template.Handler, workflowHdl *workflow.Handler,
 	taskHdl *task.Handler,
 	ticketHdl *ticket.Handler, dispatchHdl *dispatch.Handler,
@@ -33,31 +30,16 @@ func InitGinWebServer(mdls []gin.HandlerFunc, sdk *sdk.SDK,
 	server.Use(mdls...)
 
 	// 登录检查
-	server.Use(sdk.CheckLogin())
+	server.Use(auth.CheckLogin())
 
 	// 权限策略检查
-	server.Use(sdk.CheckPolicy())
+	server.Use(auth.CheckPolicy())
 
-	// 注册各个业务模块的私有路由及 EIAM 敏防 Capability 网关防护
 	templateHdl.PrivateRoutes(server.Engine)
 	workflowHdl.PrivateRoutes(server.Engine)
 	taskHdl.PrivateRoutes(server.Engine)
 	ticketHdl.PrivateRoutes(server.Engine)
 	dispatchHdl.PrivateRoutes(server.Engine)
-
-	// 异步启动 EIAM 资产注册控制器
-	go func() {
-		// 延迟执行，确保路由完全就绪
-		time.Sleep(time.Second)
-
-		// 新版本 SDK 内部会启动后台协程维持租约，需传入长生命周期的 Context
-		if err := syncer.WithOption(
-			capability.WithPermissions(providers...),
-			capability.WithRouter(server.Engine),
-		).Sync(context.Background()); err != nil {
-			elog.Error("EIAM 资产注册控制器启动失败", elog.FieldErr(err))
-		}
-	}()
 
 	return server
 }
