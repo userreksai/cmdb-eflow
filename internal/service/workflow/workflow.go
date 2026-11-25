@@ -67,6 +67,9 @@ func NewWorkflowService(
 // --- Workflow 核心流程定义业务服务实现 ---
 
 func (s *workflowService) Create(ctx context.Context, req domain.Workflow) (int64, error) {
+	if err := ApplyEnginePolicy(&req); err != nil {
+		return 0, err
+	}
 	return s.repo.Create(ctx, req)
 }
 
@@ -104,6 +107,9 @@ func (s *workflowService) FindByIds(ctx context.Context, ids []int64) ([]domain.
 }
 
 func (s *workflowService) Update(ctx context.Context, req domain.Workflow) (int64, error) {
+	if err := ApplyEnginePolicy(&req); err != nil {
+		return 0, err
+	}
 	return s.repo.Update(ctx, req)
 }
 
@@ -112,7 +118,7 @@ func (s *workflowService) Delete(ctx context.Context, id int64) (int64, error) {
 }
 
 func (s *workflowService) Deploy(ctx context.Context, wf domain.Workflow) error {
-	if err := wf.ValidateEngineType(); err != nil {
+	if err := ApplyEnginePolicy(&wf); err != nil {
 		return err
 	}
 

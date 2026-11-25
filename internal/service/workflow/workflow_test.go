@@ -79,6 +79,10 @@ func TestService_Find(t *testing.T) {
 }
 
 func TestService_Deploy(t *testing.T) {
+	// 以上游默认策略（空引擎兼容为 easy-workflow）验证发布链路；flowx-only 策略见 engine_policy_test.go
+	SetEnginePolicy(domain.EngineTypeEasyFlow, true)
+	t.Cleanup(func() { SetEnginePolicy(domain.EngineTypeFlowx, false) })
+
 	// 标准的审批流 LogicFlow 画布测试数据
 	validFlowData := domain.CanvasData{
 		"nodes": []any{
