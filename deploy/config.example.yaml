@@ -1,0 +1,79 @@
+# eflow 源码部署配置示例（对接 ECMDB / ecmdb-task，不接入 eiam / ealert）
+#
+# 启动：go run main.go server --config=config/config.yaml
+# 依赖：MySQL、Kafka、Etcd，以及 ecmdb-main（登录鉴权、用户、部门、值班）与 ecmdb-task（自动化脚本执行）
+
+log:
+  debug: false
+
+# HTTP 服务。前端 / nginx 将 /api/ticket/* 转发到这里并去掉 /ticket 前缀（与上游 ecmdb-web 一致）
+web:
+  host: "0.0.0.0"
+  port: 8005
+
+mysql:
+  dsn: "<user>:<password>@tcp(<host>:3306)/eflow?charset=utf8mb4&collation=utf8mb4_general_ci&parseTime=True&loc=Local&timeout=1s&readTimeout=3s&writeTimeout=3s&multiStatements=true&interpolateParams=true"
+
+kafka:
+  network: tcp
+  addresses:
+    - "<host>:9092"
+
+etcd:
+  endpoints:
+    - "<host>:2379"
+
+# 登录与接口鉴权：委托给 ECMDB 的 /api/permission/check_login、/api/permission/check_policy
+policy:
+  auth_url: "http://<ecmdb-host>:8000"
+  timeout: 5s
+
+# 单租户部署：所有请求、后台任务与 MQ 消息统一使用该租户 ID
+tenant:
+  default_id: 1
+
+# 流程引擎：本部署统一使用 flowx
+workflow:
+  default_engine: flowx
+  allow_easyflow: false
+
+# 通知改为"挂脚本"：配置 ecmdb-task 中通知脚本的执行单元 ID（参数约定见 docs/notify-script.md）
+# 不配置 runner_id 时退回飞书 / 企微应用直连发送（需要下方 lark / wechat 凭证）
+notify:
+  runner_id: 0
+  max_execution_seconds: 60
+  timeout: 5s
+
+grpc:
+  server:
+    # eflow 对外 gRPC（ticket.v1，告警转工单等业务方调用）
+    eflow:
+      name: "eflow"
+      listen_addr: "0.0.0.0:9005"
+      advertise_addr: ""
+      auth_token: "<shared-token>"
+  client:
+    # 用户 / 部门：由 ECMDB 提供 eiam.user.v1 与 eiam.department.v1 兼容服务，因此 name 指向 ECMDB
+    eiam:
+      name: "ecmdb"
+      auth_token: "<ecmdb-grpc-token>"
+    # 值班（rota）：ECMDB 的 ecmdb.rota.v1.OnCallService
+    ecmdb:
+      name: "ecmdb"
+      auth_token: "<ecmdb-grpc-token>"
+    # 自动化脚本执行：ecmdb-task 调度中心（需提供 etask.scheduler.v1 / runner.v1 / executor.v1 兼容接口）
+    etask:
+      name: "scheduler"
+      auth_token: "<ecmdb-task-grpc-token>"
+
+# 以下为可选：仅在不使用通知脚本、改用应用直连发送，或需要飞书卡片内审批时配置
+lark:
+  app_id: ""
+  app_secret: ""
+  verification_token: ""
+  encrypt_key: ""
+
+wechat:
+  corp_id: ""
+  corp_secret: ""
+  agent_id: 0
