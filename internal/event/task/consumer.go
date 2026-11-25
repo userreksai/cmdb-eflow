@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/Duke1616/eflow/internal/domain"
 	"github.com/Duke1616/eflow/internal/event"
+	"github.com/Duke1616/eflow/internal/pkg/notification/provider/script"
 	taskSvc "github.com/Duke1616/eflow/internal/service/task"
 	"github.com/Duke1616/eflow/pkg/mqx"
 	"github.com/Duke1616/eiam/pkg/ctxutil"
@@ -55,6 +57,10 @@ func (c *ExecuteResultConsumer) handle(ctx context.Context, current event.Execut
 	}
 	if current.RequestID == "" {
 		return fmt.Errorf("工作流完成事件缺少 request_id: execution_id=%d", current.ExecID)
+	}
+	// 通知脚本的执行不对应自动化任务尝试，结果无需回写（执行端通常已按来源过滤，这里兜底）
+	if strings.HasPrefix(current.RequestID, script.RequestIDPrefix) {
+		return nil
 	}
 	if ctxutil.GetTenantID(ctx) <= 0 {
 		return fmt.Errorf("工作流完成事件缺少租户身份: request_id=%s", current.RequestID)

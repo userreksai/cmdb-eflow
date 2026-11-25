@@ -3,7 +3,8 @@ package ioc
 import (
 	"time"
 
-	templatev1 "github.com/Duke1616/eflow/api/proto/gen/ealert/template/v1"
+	"github.com/spf13/viper"
+
 	processConsumer "github.com/Duke1616/eflow/internal/event/process"
 	taskConsumer "github.com/Duke1616/eflow/internal/event/task"
 	templateConsumer "github.com/Duke1616/eflow/internal/event/template"
@@ -13,7 +14,6 @@ import (
 	"github.com/Duke1616/eflow/internal/service/engine"
 	serviceTask "github.com/Duke1616/eflow/internal/service/task"
 	withdrawalSvc "github.com/Duke1616/eflow/internal/service/withdrawal"
-	workflow "github.com/Duke1616/eflow/internal/service/workflow"
 )
 
 // InitTasks 初始化所有后台任务
@@ -28,9 +28,8 @@ func InitTasks(
 	wechatConsumer *wechatConsumerPkg.WechatTicketConsumer,
 	larkWsServer *feishuCallback.LarkCallbackServer,
 	wechatCallbackConsumer *templateConsumer.WechatApprovalCallbackConsumer,
-	templateClient templatev1.TemplateServiceClient,
 ) []Task {
-	return []Task{
+	tasks := []Task{
 		executeResultConsumer,
 		serviceTask.NewStartTaskJob(taskSvc, 100, 8, 10*time.Second, 30*time.Second),
 		serviceTask.NewTaskRecoveryJob(taskSvc, 100, time.Minute, time.Minute, 30*time.Second),
@@ -38,8 +37,12 @@ func InitTasks(
 		withdrawalSvc.NewRecoveryJob(withdrawalRepo, compensationPlanner, 100, time.Minute, 5*time.Minute),
 		processConsumer,
 		wechatConsumer,
-		larkWsServer,
 		wechatCallbackConsumer,
-		workflow.NewTemplateBootstrapTask(templateClient),
 	}
+	// 飞书卡片回调长连接仅在配置了飞书应用时启动（通知脚本模式下卡片由脚本发送，通常无需回调）。
+	// 未接入 ealert，上游的通知模板自愈任务（TemplateBootstrapTask）不再启动。
+	if viper.GetString("lark.app_id") != "" {
+		tasks = append(tasks, larkWsServer)
+	}
+	return tasks
 }

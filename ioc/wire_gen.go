@@ -8,7 +8,7 @@ package ioc
 
 import (
 	"github.com/Duke1616/eflow/internal/callback/feishu"
-	"github.com/Duke1616/eflow/internal/client/ealert"
+	"github.com/Duke1616/eflow/internal/client/ecmdb"
 	"github.com/Duke1616/eflow/internal/client/eiam"
 	"github.com/Duke1616/eflow/internal/client/etask"
 	"github.com/Duke1616/eflow/internal/grpc"
@@ -105,13 +105,14 @@ func InitApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	ealertConn := InitEALERTGrpcClient(registry)
-	ealertClient := ealert.NewEALERTClient(ealertConn)
+	departmentServiceClient := eiamClient.DepartmentClient
+	ecmdbConn := InitECMDBGrpcClient(registry)
+	ecmdbClient := ecmdb.NewECMDBClient(ecmdbConn)
+	ealertClient := InitLocalEALERTClient(userServiceClient, departmentServiceClient, ecmdbClient)
 	notificationServiceClient := ealertClient.NotificationClient
 	strategyService := strategy.NewService(userServiceClient, service, taskService, ticketService, iEngine, easyflowService, notificationServiceClient)
 	larkClient := InitLarkClient()
-	templateServiceClient := ealertClient.TemplateClient
-	notificationSender, err := InitNotificationSender(larkClient, workwxApp, notificationServiceClient, templateServiceClient)
+	notificationSender, err := InitNotificationSender(larkClient, workwxApp, client2)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +149,7 @@ func InitApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	v2 := InitTasks(taskService, withdrawalRepository, compensationPlanner, iEngine, executeResultConsumer, processEventConsumer, wechatTicketConsumer, larkCallbackServer, wechatApprovalCallbackConsumer, templateServiceClient)
+	v2 := InitTasks(taskService, withdrawalRepository, compensationPlanner, iEngine, executeResultConsumer, processEventConsumer, wechatTicketConsumer, larkCallbackServer, wechatApprovalCallbackConsumer)
 	app := &App{
 		Web:    component,
 		Server: server,
@@ -162,8 +163,13 @@ func InitApp() (*App, error) {
 func InitTemplateSyncer() (workflow.ITemplateSyncer, error) {
 	client := InitEtcdClient()
 	registry := InitRegistry(client)
-	ealertConn := InitEALERTGrpcClient(registry)
-	ealertClient := ealert.NewEALERTClient(ealertConn)
+	eiamConn := InitEIAMGrpcClient(registry)
+	eiamClient := eiam.NewEIAMClient(eiamConn)
+	userServiceClient := eiamClient.UserClient
+	departmentServiceClient := eiamClient.DepartmentClient
+	ecmdbConn := InitECMDBGrpcClient(registry)
+	ecmdbClient := ecmdb.NewECMDBClient(ecmdbConn)
+	ealertClient := InitLocalEALERTClient(userServiceClient, departmentServiceClient, ecmdbClient)
 	templateServiceClient := ealertClient.TemplateClient
 	iTemplateSyncer := workflow.NewTemplateSyncer(templateServiceClient)
 	return iTemplateSyncer, nil

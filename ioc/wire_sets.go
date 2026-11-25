@@ -7,6 +7,7 @@ import (
 	easyEngine "github.com/Bunny3th/easy-workflow/workflow/engine"
 	feishuCallback "github.com/Duke1616/eflow/internal/callback/feishu"
 	"github.com/Duke1616/eflow/internal/client/ealert"
+	"github.com/Duke1616/eflow/internal/client/ecmdb"
 	"github.com/Duke1616/eflow/internal/client/eiam"
 	"github.com/Duke1616/eflow/internal/client/etask"
 	"github.com/Duke1616/eflow/internal/event"
@@ -151,14 +152,19 @@ var (
 
 	grpcSet = wire.NewSet(
 		InitRegistry,
+		// eiam 客户端连接到 ECMDB 提供的 eiam.user.v1 / eiam.department.v1 兼容服务（grpc.client.eiam.name 指向 ECMDB）
 		InitEIAMGrpcClient,
-		InitEALERTGrpcClient,
+		// etask 客户端连接到 ecmdb-task 提供的新版调度协议
 		InitETASKGrpcClient,
+		// ECMDB 值班（rota）服务
+		InitECMDBGrpcClient,
 
 		// 引入本地客户端网关
 		eiam.NewEIAMClient,
 		eiam.NewUserClient,
-		ealert.NewEALERTClient,
+		// 未部署 ealert：使用本地实现（审批人解析本地完成，消息由通知脚本发送）
+		InitLocalEALERTClient,
+		ecmdb.NewECMDBClient,
 		etask.NewETASKClient,
 		etask.NewClient,
 
